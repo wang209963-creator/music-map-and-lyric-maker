@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>🎮📝 Rhythm Mapper + LRC 歌詞工作台 整合版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <style>
+        /* ====== 全域基底樣式（取自 LRC 歌詞工作台）====== */
+
+        :root {
+            --bg-color: #0b0b0e;
+            --card-bg: #16161a;
+            --panel-bg: #1e1e24;
+            --text-color: #ffffff;
+            --primary-color: #c5a3ff; 
+            --accent-color: #ff5276;  
+            --dim-text: rgba(255, 255, 255, 0.35);
+            --board-bg: #141419;      
+        }
+        
+        /* 網頁基礎自然流，允許整體滾動以相容行動端鍵盤 */
+        /* 為避免底部控制列卡到系統手勢列（三角形/圓形/正方形），保留安全間距 */
+        html, body {
+            width: 100%;
+            height: auto;
+            margin: 0;
+            padding: 0;
+            padding-bottom: calc(28px + env(safe-area-inset-bottom));
+            background-color: var(--bg-color);
+            font-family: "PingFang TC", "Heiti TC", "Microsoft JhengHei", sans-serif;
+            color: var(--text-color);
+            box-sizing: border-box;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .lrc-app-container {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 16px;
+            box-sizing: border-box;
+            background: var(--card-bg);
+        }
+        
+        /* 頂部切換選單 */
+        .tabs-menu {
+            display: flex;
+            background: #0d0d11;
+            padding: 4px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            border: 1px solid #252530;
+        }
+        .tab-btn {
+            flex: 1; background: none; border: none; color: #777;
+            padding: 12px; font-weight: bold; font-size: 14px;
+            cursor: pointer; border-radius: 9px; transition: all 0.2s;
+        }
+        .tab-btn.active {
+            background: var(--panel-bg); color: var(--primary-color);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        }
+        
+        .tab-content { 
+            display: none; 
+            width: 100%;
+        }
+        .tab-content.active { 
+            display: block; 
+        }
+
+        /* 上傳控制面板 */
+        .upload-header-zone {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
+        }
+        .toggle-upload-btn {
+            background: #252532; border: 1px solid #3b3b4f; color: #ccc;
+            padding: 5px 12px; border-radius: 20px; font-size: 11px; cursor: pointer;
+        }
+        .reset-media-btn {
+            background: rgba(255, 82, 118, 0.1); border: 1px solid rgba(255, 82, 118, 0.4); color: var(--accent-color);
+            padding: 3px 8px; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: bold;
+        }
+
+        .sv-upload-box {
+            border: 2px dashed #3a3a4a; border-radius: 16px; padding: 25px;
+            text-align: center; background: rgba(0, 0, 0, 0.2); cursor: pointer;
+            margin-bottom: 16px; position: relative;
+        }
+        .sv-upload-box input[type="file"] {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;
+        }
+        .sv-plus-icon { font-size: 32px; color: var(--accent-color); margin-bottom: 4px; }
+        .sv-upload-title { font-size: 15px; font-weight: bold; color: #fff; }
+
+        /* 歌詞文字輸入區 */
+        .raw-input-area { margin-bottom: 16px; }
+        .raw-input-header { display: flex; justify-content: space-between; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+        .file-link-btn { position: relative; color: var(--primary-color); cursor: pointer; text-decoration: underline; }
+        .file-link-btn input { position: absolute; top:0; left:0; width:100%; height:100%; opacity:0; }
+        
+        .main-textarea {
+            width: 100%; height: 150px; background: #0d0d11; color: #fff;
+            border: 1px solid #2c2c3a; border-radius: 12px; padding: 12px;
+            box-sizing: border-box; resize: none; font-family: monospace; font-size: 15px; line-height: 1.6;
+            outline: none;
+        }
+
+        /* 👑 完美復原：高級黑歌詞打點卡片，並強置啟用獨立垂直滑桿滾動條 (overflow-y: auto) */
+        .sv-lyrics-board {
+            background: var(--board-bg); 
+            border: 1px solid #22222a;
+            border-radius: 20px; 
+            padding: 20px 16px; 
+            margin-bottom: 16px;
+            height: 380px;            /* 設定高質感固定高度卡片 */
+            box-sizing: border-box;
+            overflow-y: auto;          /* 🌟 這就是你要的獨立滾動條滑桿！ */
+            scroll-behavior: smooth;
+        }
+        
+        /* 自訂高質感滾動條外觀 (選用，融入你的暗黑科技風) */
+        .sv-lyrics-board::-webkit-scrollbar {
+            width: 6px;
+        }
+        .sv-lyrics-board::-webkit-scrollbar-thumb {
+            background: #333344;
+            border-radius: 10px;
+        }
+        .sv-lyrics-board::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-color);
+        }
+        
+        /* 看板內行元素 */
+        .sv-board-line {
+            font-size: 15px; color: var(--dim-text); padding: 10px;
+            transition: all 0.2s ease; line-height: 1.5; word-break: break-all;
+            border-radius: 8px; display: flex; align-items: center; justify-content: center; text-align: center;
+        }
+        .sv-board-line.next-target {
+            font-weight: bold !important; color: #ffffff !important; font-size: 22px !important; 
+            text-shadow: 0 0 12px rgba(255,255,255,0.3); padding: 14px 10px; background: rgba(255, 255, 255, 0.02);
+        }
+        .sv-board-line.already-tagged {
+            color: rgba(255,255,255,0.75); font-size: 14px; background: rgba(197, 163, 255, 0.04);
+            margin-bottom: 2px; border: 1px dashed rgba(197, 163, 255, 0.12);
+        }
+        
+        /* 看板雙擊編輯框 */
+        .board-inline-input-time {
+            background: #252535; color: var(--primary-color); border: 1px solid var(--primary-color);
+            padding: 4px 6px; font-size: 13px; border-radius: 6px; width: 95px; text-align: center; margin-right: 8px;
+        }
+        .board-inline-input-text {
+            background: #0d0d11; color: #fff; border: 1px solid var(--primary-color);
+            padding: 4px 10px; font-size: 14px; border-radius: 6px; flex: 1; text-align: left;
+        }
+
+        /* 按鈕工具列 */
+        .sv-action-bar {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
+        }
+        .sv-btn-group-right { display: flex; gap: 6px; }
+        
+        .sv-btn {
+            background: #252530; border: 1px solid #333; color: #e0e0e0;
+            padding: 8px 14px; border-radius: 20px; font-size: 13px; font-weight: bold; cursor: pointer;
+        }
+        .sv-btn.accent-red { background: var(--accent-color); color: #fff; border: none; }
+
+        /* 高階播放面板 */
+        .playback-scroll-container {
+            border-radius: 16px; background: #06060a; border: 1px solid #1a1a24;
+            padding: 20px 15px; margin-bottom: 20px; height: 380px; overflow-y: auto;
+        }
+        .player-row-item {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 12px; border-radius: 8px; margin-bottom: 5px;
+            transition: all 0.2s ease; color: rgba(255, 255, 255, 0.4);
+        }
+        .player-left-time { font-family: monospace; font-size: 13px; width: 80px; }
+        .player-center-text { flex: 1; text-align: center; font-size: 15px; word-break: break-all; padding: 0 10px; }
+        .player-right-duration { width: 90px; text-align: right; }
+        .hourglass-tag-btn {
+            background: #1a1a24; border: 1px solid #2d2d3d; color: #bbb;
+            font-size: 11px; padding: 4px 8px; border-radius: 50px; cursor: pointer;
+        }
+        .player-row-item.current-active {
+            color: #ffffff !important; background: rgba(255, 255, 255, 0.05);
+        }
+        .player-row-item.current-active .player-center-text { font-weight: bold; font-size: 17px; color: #fff; }
+        .player-row-item.current-active .hourglass-tag-btn { background: var(--primary-color); color: #000; font-weight: bold; }
+
+        .lines-counter-tag { text-align: right; font-size: 12px; color: #aaa; margin-bottom: 6px; padding-right: 5px; }
+
+        /* 底部懸浮控制艙 (整合靜態流，永不被鍵盤遮蔽或逼入黑洞) */
+        .sv-fixed-bottom-bar {
+            width: 100%;
+            background: #14141c;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 12px 16px;
+            border-radius: 18px;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 24px;
+            margin-bottom: 8px;
+        }
+        
+        .sv-bottom-left-track { display: flex; align-items: center; gap: 10px; flex: 1; margin-right: 15px; }
+        .sv-timeline-text { font-family: monospace; font-size: 13px; color: #b5b5c0; }
+        .sv-master-slider { flex: 1; cursor: pointer; accent-color: var(--primary-color); height: 8px; background: #2b2b3a; border-radius: 4px; }
+        .sv-bottom-right-controls { display: flex; align-items: center; gap: 8px; }
+        
+        .sv-circle-control {
+            width: 42px; height: 42px; border-radius: 50%; border: 1px solid #3a3a4a; background: #111; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; cursor: pointer; user-select: none;
+        }
+        .sv-circle-control.play-toggle { font-size: 16px; width: 44px; height: 44px; border-color: var(--primary-color); color: var(--primary-color); }
+        .sv-circle-control.master-record-btn {
+            width: 52px; height: 52px; background: var(--accent-color); border: none; font-size: 24px; box-shadow: 0 0 12px rgba(255, 82, 118, 0.3);
+        }
+
+        .toast {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: var(--primary-color); color: #000;
+            padding: 6px 18px; border-radius: 20px; font-weight: bold; font-size: 12px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 10000;
+        }
+        audio, video { display: none !important; }
+    
+
+        /* ====== Rhythm Mapper 專用樣式 ====== */
+
+        body { background-color: #0a0a0c; color: white; font-family: system-ui, -apple-system, sans-serif; }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #6366f1;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+        }
+    
+
+        /* ====== 整合版頂層分頁列樣式 ====== */
+        .app-top-tabs {
+            display: flex;
+            gap: 8px;
+            max-width: 600px;
+            margin: 0 auto 16px auto;
+            padding: 6px;
+            background: #0d0d11;
+            border: 1px solid #252530;
+            border-radius: 16px;
+        }
+        .app-top-tab-btn {
+            flex: 1;
+            background: none;
+            border: none;
+            color: #888;
+            padding: 12px;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 12px;
+            transition: all 0.2s;
+        }
+        .app-top-tab-btn.active {
+            background: #1e1e24;
+            color: #c5a3ff;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        }
+        .app-view { display: none; }
+        .app-view.active { display: block; }
+    </style>
+</head>
+<body>
+
+    <div class="app-top-tabs">
+        <button class="app-top-tab-btn active" id="app-tab-rhythm" onclick="switchAppView('rhythm')">🎮 節奏地圖編輯器</button>
+        <button class="app-top-tab-btn" id="app-tab-lyrics" onclick="switchAppView('lyrics')">📝 LRC 歌詞工作台</button>
+    </div>
+
+    <div id="app-view-rhythm" class="app-view active">
+<div class="min-h-screen relative overflow-hidden px-4 py-6 flex flex-col items-center justify-center">
+        <div class="fixed inset-0 overflow-hidden pointer-events-none opacity-20">
+            <div class="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-indigo-600 rounded-full blur-[120px]"></div>
+            <div class="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-600 rounded-full blur-[120px]"></div>
+        </div>
+
+        <main class="relative z-10 max-w-xl w-full bg-gray-900/40 border border-white/10 p-5 rounded-3xl shadow-2xl backdrop-blur-md space-y-5">
+            <header class="text-center lg:text-left">
+                <h1 class="text-2xl font-black tracking-tight bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                    Rhythm Mapper
+                </h1>
+                <p class="text-[11px] text-gray-400 mt-0.5">下落式預覽 & APK 深度相容版</p>
+            </header>
+
+            <div id="error-box" class="hidden p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl text-center"></div>
+
+            <div class="space-y-1.5">
+                <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">Media Source File</label>
+                <input type="file" id="audio-input" accept="audio/*,video/mp4,.mp3,.m4a,.mp4" class="hidden">
+                <div id="upload-zone" class="p-5 border-2 border-dashed border-gray-800 hover:border-indigo-500/50 rounded-2xl flex flex-col items-center justify-center gap-1 bg-gray-950/40 cursor-pointer transition-all">
+                    <svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 002-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    <span id="file-name-display" class="text-xs text-gray-400 font-medium text-center break-all">Select MP3, M4A, MP4</span>
+                </div>
+            </div>
+
+            <div class="space-y-1.5">
+                <div class="flex justify-between items-center">
+                    <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Note Density</label>
+                    <span class="text-indigo-400 font-mono font-bold text-base"><span id="density-txt">180</span> NPM</span>
+                </div>
+                <input type="range" id="density-slider" min="60" max="480" step="10" value="180" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+            </div>
+
+            <div id="recommended-box" class="hidden p-3 bg-indigo-500/10 rounded-xl border border-indigo-500/20 space-y-3 transition-all">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-[10px] text-indigo-300 uppercase font-bold tracking-tighter">Recommended Density</p>
+                        <p class="text-xs font-semibold text-white">~<span id="recom-density-val">--</span> NPM</p>
+                    </div>
+                    <button id="apply-original-btn" class="text-[10px] bg-indigo-500 hover:bg-indigo-600 text-white px-2 py-0.5 rounded-md font-bold uppercase">Apply</button>
+                </div>
+                <div class="grid grid-cols-3 gap-2 pt-2 border-t border-white/10">
+                    <button id="apply-easy-btn" class="flex flex-col items-center gap-0.5 bg-gray-950/60 hover:bg-gray-900 border border-white/5 rounded-lg py-2 transition-all">
+                        <span class="text-[10px] text-gray-400 font-bold uppercase">簡單</span>
+                        <span class="text-sm font-mono font-bold text-emerald-400"><span id="recom-easy-val">--</span></span>
+                    </button>
+                    <button id="apply-normal-btn" class="flex flex-col items-center gap-0.5 bg-gray-950/60 hover:bg-gray-900 border border-white/5 rounded-lg py-2 transition-all">
+                        <span class="text-[10px] text-gray-400 font-bold uppercase">普通</span>
+                        <span class="text-sm font-mono font-bold text-indigo-400"><span id="recom-normal-val">--</span></span>
+                    </button>
+                    <button id="apply-hard-btn" class="flex flex-col items-center gap-0.5 bg-gray-950/60 hover:bg-gray-900 border border-white/5 rounded-lg py-2 transition-all">
+                        <span class="text-[10px] text-gray-400 font-bold uppercase">困難</span>
+                        <span class="text-sm font-mono font-bold text-rose-400"><span id="recom-hard-val">--</span></span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="space-y-1.5">
+                <div class="flex justify-between items-center">
+                    <label class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Timing Offset</label>
+                    <span id="offset-txt" class="text-indigo-400 font-mono font-bold text-xs">-0.15s</span>
+                </div>
+                <input type="range" id="offset-slider" min="-0.5" max="0.5" step="0.01" value="-0.15" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+            </div>
+
+            <div class="space-y-2">
+                <button id="generate-btn" disabled class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-800/80 disabled:text-gray-500 rounded-xl font-semibold shadow-lg transition-all active:scale-[0.99] text-sm">
+                    Generate Map
+                </button>
+                <button id="download-btn" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-semibold shadow-lg transition-all active:scale-[0.99] text-sm hidden">
+                    📥 Export JSON Map
+                </button>
+            </div>
+
+            <div id="preview-container" class="hidden border-t border-white/10 pt-4 space-y-3">
+                <div class="flex items-center justify-between">
+                    <p class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Arcade Downward Preview</p>
+                    <div class="text-right font-mono text-xs text-gray-400">
+                        <span id="current-time-txt">0:00</span> / <span id="total-time-txt">0:00</span>
+                    </div>
+                </div>
+
+                <div class="flex justify-center">
+                    <div class="relative bg-black border-2 border-gray-800 rounded-2xl overflow-hidden shadow-2xl w-full max-w-[280px]">
+                        <canvas id="preview-canvas" class="w-full h-[320px] block"></canvas>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 bg-gray-950/60 p-2.5 rounded-xl border border-white/5">
+                    <button id="play-pause-btn" class="w-8 h-8 bg-white text-black rounded-full flex items-center justify-center font-bold text-xs shrink-0 shadow-md">▶</button>
+                    <input type="range" id="timeline-slider" min="0" max="100" step="0.01" value="0" class="flex-1 h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                </div>
+            </div>
+        </main>
+
+        <div id="copy-modal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+            <div class="bg-gray-900 border border-white/10 rounded-3xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+                <h3 class="text-sm font-bold text-emerald-400">🎉 譜面檔案匯出面板</h3>
+                <p class="text-[11px] text-gray-400 leading-relaxed">請選擇您想在 APK 內使用的方式（即使打包後不具備儲存權限，方案二依然 100% 可用）：</p>
+                
+                <div class="space-y-2">
+                    <button id="force-download-uri" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold transition-all">
+                        方案一：直接下載 .json 檔案
+                    </button>
+                    <button id="stream-copy-btn" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-bold transition-all">
+                        方案二：一鍵全量複製（防截斷最保險）
+                    </button>
+                </div>
+                <div class="flex justify-end pt-1">
+                    <button id="modal-close-btn" class="px-4 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-xl text-xs font-bold">返回主頁</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <audio id="hidden-media" class="hidden"></audio>
+    </div>
+
+    <div id="app-view-lyrics" class="app-view">
+<div class="lrc-app-container">
+    
+    <div class="tabs-menu">
+        <button class="tab-btn active" id="tab-btn-maker" onclick="switchActiveTab('maker')">📝 街聲製作模式 (打點看板)</button>
+        <button class="tab-btn" id="tab-btn-player" onclick="switchActiveTab('player')">🎬 高階播放模式 (分項複製)</button>
+    </div>
+
+    <div class="upload-header-zone">
+        <div>
+            <span style="font-size: 12px; color:#aaa;" id="lbl-file-status-text">音訊狀態：未上傳影音 (模擬時鐘模式)</span>
+            <button class="reset-media-btn" id="btn-reset-media" style="display: none;" onclick="resetUploadedMediaFile()">🔄 重置</button>
+        </div>
+        <button class="toggle-upload-btn" onclick="toggleUploadContainer()">👁️ <span id="lbl-toggle-text">隱藏上傳區</span></button>
+    </div>
+    
+    <div class="sv-upload-box" id="upload-panel-box">
+        <div class="sv-plus-icon">+</div>
+        <div class="sv-upload-title">點擊上傳音樂/影片 (支援 MP4)</div>
+        <input type="file" id="media-file-uploader" accept="audio/*,video/mp4,video/*">
+    </div>
+
+    <div id="view-content-maker" class="tab-content active">
+        <div class="raw-input-area" id="wrapper-raw-textarea">
+            <div class="raw-input-header">
+                <span>請在此輸入純文字歌詞：</span>
+                <span class="file-link-btn">
+                    📂 匯入文件 (.txt/.pdf/.docx)
+                    <input type="file" id="doc-file-uploader" accept="text/plain, application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+                </span>
+            </div>
+            <textarea id="textarea-lyrics-source" class="main-textarea" placeholder="在此貼上每行未帶時間戳的歌詞..." oninput="syncToPreviewBoard()"></textarea>
+            <div style="text-align: right; margin-top: 5px;">
+                <button class="sv-btn" style="padding: 4px 12px; font-size:11px; background:#2a2a35;" onclick="lockAndStartTagging()">🔒 鎖定大框</button>
+            </div>
+        </div>
+
+        <div class="sv-lyrics-board" id="live-preview-board"></div>
+
+        <div class="sv-action-bar">
+            <div>
+                <button class="sv-btn" onclick="triggerSongMetadataInfo()">歌曲資訊</button>
+                <button class="sv-btn" id="btn-toggle-edit" style="border-color: var(--primary-color); color: var(--primary-color);" onclick="toggleUnlockTextarea()">🔓 解鎖大框</button>
+            </div>
+            <div class="sv-btn-group-right">
+                <button class="sv-btn" onclick="undoLastLineTag()">上一句</button>
+                <button class="sv-btn" onclick="resetAllTagsToRaw()">重來</button>
+                <button class="sv-btn" onclick="copyCurrentLrcText()">複製</button>
+                <button class="sv-btn accent-red" onclick="exportTxtFileDownload()">匯出</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-content-player" class="tab-content">
+        <div class="lines-counter-tag" id="lbl-playback-counter">0 / 0 行</div>
+        <div class="playback-scroll-container" id="playback-scroll-viewport"></div>
+    </div>
+
+    <div class="sv-fixed-bottom-bar">
+        <div class="sv-bottom-left-track">
+            <span class="sv-timeline-text" id="lbl-track-current">00:00</span>
+            <input type="range" class="sv-master-slider" id="progress-master-slider" min="0" value="0" step="0.01" oninput="handleSliderChange()">
+            <span class="sv-timeline-text" id="lbl-track-total">00:00</span>
+        </div>
+        <div class="sv-bottom-right-controls">
+            <div class="sv-circle-control" onclick="skipAudioSeconds(-5)">↶5</div>
+            <div class="sv-circle-control" onclick="skipAudioSeconds(5)">5↷</div>
+            <div class="sv-circle-control play-toggle" id="btn-master-play" onclick="toggleAudioPlayback()">▶</div>
+            <div class="sv-circle-control master-record-btn" onclick="captureNextLineStamp()">⏱️</div>
+        </div>
+    </div>
+
+</div>
+
+<div class="toast" id="global-toast-box">📋 已成功複製！</div>
+
+<audio id="html5-audio-node" preload="auto"></audio>
+<video id="html5-video-node" preload="auto"></video>
+    </div>
+
+    <script>
+        // ====== 整合版：頂層分頁切換邏輯 ======
+        function switchAppView(view) {
+            document.getElementById('app-view-rhythm').classList.toggle('active', view === 'rhythm');
+            document.getElementById('app-view-lyrics').classList.toggle('active', view === 'lyrics');
+            document.getElementById('app-tab-rhythm').classList.toggle('active', view === 'rhythm');
+            document.getElementById('app-tab-lyrics').classList.toggle('active', view === 'lyrics');
+        }
+    </script>
+
+    <script>
+        // ====== Rhythm Mapper 邏輯（包進 IIFE 以避免與歌詞工作台變數衝突）======
+        (function() {
+
+        let selectedFile = null;
+        let finalOutputMap = null;
+        let calculatedRecommendedDensity = 180;
+        let isPlaying = false;
+        let animationFrameId = null;
+
+        const audioInput = document.getElementById('audio-input');
+        const uploadZone = document.getElementById('upload-zone');
+        const fileNameDisplay = document.getElementById('file-name-display');
+        const densitySlider = document.getElementById('density-slider');
+        const densityTxt = document.getElementById('density-txt');
+        const recommendedBox = document.getElementById('recommended-box');
+        const recomDensityVal = document.getElementById('recom-density-val');
+        const recomEasyVal = document.getElementById('recom-easy-val');
+        const recomNormalVal = document.getElementById('recom-normal-val');
+        const recomHardVal = document.getElementById('recom-hard-val');
+        const applyOriginalBtn = document.getElementById('apply-original-btn');
+        const applyEasyBtn = document.getElementById('apply-easy-btn');
+        const applyNormalBtn = document.getElementById('apply-normal-btn');
+        const applyHardBtn = document.getElementById('apply-hard-btn');
+        let recommendedEasy = 80, recommendedNormal = 120, recommendedHard = 160;
+
+        // 依照 C++ 程式中的公式，將 60~480 NPM 的推薦值換算成 簡單/普通/困難 三個難度
+        // r 為 h 在 [60, 480] 對數尺度上的位置 (0~1)
+        function calcDifficulties(h) {
+            const clampedH = Math.min(Math.max(h, 60), 480);
+            const r = (Math.log(clampedH) - Math.log(60)) / (Math.log(480) - Math.log(60));
+            const e = Math.round((80 + (60 * r)) / 10) * 10;
+            const n = Math.round((120 + (120 * r)) / 10) * 10;
+            const d = Math.round((160 + (240 * r)) / 10) * 10;
+            return { e, n, d };
+        }
+        const offsetSlider = document.getElementById('offset-slider');
+        const offsetTxt = document.getElementById('offset-txt');
+        const generateBtn = document.getElementById('generate-btn');
+        const downloadBtn = document.getElementById('download-btn');
+        const errorBox = document.getElementById('error-box');
+        
+        const previewContainer = document.getElementById('preview-container');
+        const hiddenMedia = document.getElementById('hidden-media');
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const timelineSlider = document.getElementById('timeline-slider');
+        const currentTimeTxt = document.getElementById('current-time-txt');
+        const totalTimeTxt = document.getElementById('total-time-txt');
+        const previewCanvas = document.getElementById('preview-canvas');
+        const ctx = previewCanvas.getContext('2d');
+
+        const copyModal = document.getElementById('copy-modal');
+        const forceDownloadUri = document.getElementById('force-download-uri');
+        const streamCopyBtn = document.getElementById('stream-copy-btn');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+
+        uploadZone.addEventListener('click', () => audioInput.click());
+        densitySlider.addEventListener('input', (e) => densityTxt.innerText = e.target.value);
+        offsetSlider.addEventListener('input', (e) => offsetTxt.innerText = `${e.target.value}s`);
+
+        audioInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            selectedFile = file;
+            fileNameDisplay.innerText = file.name;
+            generateBtn.disabled = false;
+            showError("");
+            stopPreview();
+            previewContainer.classList.add('hidden');
+            hiddenMedia.src = URL.createObjectURL(file);
+
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const arrayBuffer = await file.arrayBuffer();
+                const decodedData = await audioCtx.decodeAudioData(arrayBuffer);
+                const channelData = decodedData.getChannelData(0);
+
+                let totalAmplitude = 0, sampleLength = 2048, hopSize = sampleLength * 4, loopCount = 0;
+                for (let x = 0; x < channelData.length - sampleLength; x += hopSize) {
+                    let fragmentSum = 0;
+                    for (let ct = 0; ct < sampleLength; ct++) fragmentSum += Math.abs(channelData[x + ct]);
+                    totalAmplitude += fragmentSum / sampleLength;
+                    loopCount++;
+                }
+                const averageAmplitude = totalAmplitude / loopCount;
+                let rawDensity = Math.round(120 + averageAmplitude * 1200);
+                rawDensity = Math.round(rawDensity / 10) * 10;
+                calculatedRecommendedDensity = Math.min(Math.max(rawDensity, 60), 480);
+
+                const diffs = calcDifficulties(calculatedRecommendedDensity);
+                recommendedEasy = diffs.e;
+                recommendedNormal = diffs.n;
+                recommendedHard = diffs.d;
+                recomDensityVal.innerText = calculatedRecommendedDensity;
+                recomEasyVal.innerText = recommendedEasy;
+                recomNormalVal.innerText = recommendedNormal;
+                recomHardVal.innerText = recommendedHard;
+                recommendedBox.classList.remove('hidden');
+                audioCtx.close();
+            } catch (err) {
+                calculatedRecommendedDensity = 180;
+                const diffs = calcDifficulties(calculatedRecommendedDensity);
+                recommendedEasy = diffs.e;
+                recommendedNormal = diffs.n;
+                recommendedHard = diffs.d;
+                recomDensityVal.innerText = calculatedRecommendedDensity;
+                recomEasyVal.innerText = recommendedEasy;
+                recomNormalVal.innerText = recommendedNormal;
+                recomHardVal.innerText = recommendedHard;
+                recommendedBox.classList.remove('hidden');
+            }
+        });
+
+        applyOriginalBtn.addEventListener('click', () => {
+            densitySlider.value = calculatedRecommendedDensity;
+            densityTxt.innerText = calculatedRecommendedDensity;
+        });
+        applyEasyBtn.addEventListener('click', () => {
+            densitySlider.value = recommendedEasy;
+            densityTxt.innerText = recommendedEasy;
+        });
+        applyNormalBtn.addEventListener('click', () => {
+            densitySlider.value = recommendedNormal;
+            densityTxt.innerText = recommendedNormal;
+        });
+        applyHardBtn.addEventListener('click', () => {
+            densitySlider.value = recommendedHard;
+            densityTxt.innerText = recommendedHard;
+        });
+
+        // 譜面演算法
+        async function runMapGeneration(file, targetDensity) {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const arrayBuffer = await file.arrayBuffer();
+            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+            const channelData = audioBuffer.getChannelData(0);
+            const sampleRate = audioBuffer.sampleRate;
+            const duration = audioBuffer.duration;
+
+            const g = 512, p = 2048, v = [], S = [];
+            for (let Q = 0; Q < channelData.length - p; Q += g) {
+                const I = channelData.slice(Q, Q + p);
+                let st = 0;
+                for (let ot = 0; ot < I.length; ot++) st += Math.abs(I[ot]);
+                S.push(st / p);
+                if (S.length > 1) v.push(Math.max(0, S[S.length - 1] - S[S.length - 2])); else v.push(0);
+            }
+
+            const b = [];
+            const E = Math.max(...S) * 0.1, O = 15;
+            for (let Q = O; Q < v.length - O; Q++) {
+                if (S[Q] < E) continue;
+                const I = v.slice(Q - O, Q + O).reduce((st, ot) => st + ot, 0) / (O * 2);
+                if (v[Q] > v[Q - 1] && v[Q] > v[Q + 1]) {
+                    const st = v[Q] / (I + 1e-4);
+                    if (st > 2 && v[Q] > E * 0.2) b.push({ time: (Q * g + p / 2) / sampleRate, saliency: st });
+                }
+            }
+
+            const L = [];
+            const _ = [...b].sort((Q, I) => I.saliency - Q.saliency).slice(0, 100);
+            for (let Q = 0; Q < _.length; Q++) {
+                for (let I = Q + 1; I < Math.min(Q + 20, _.length); I++) {
+                    const st = Math.abs(_[Q].time - _[I].time);
+                    if (st > 0.2 && st < 2) L.push(st);
+                }
+            }
+
+            let H = 128;
+            if (L.length > 0) {
+                const Q = {};
+                L.forEach(st => {
+                    [1, 2, 0.5, 4, 0.25].forEach(ot => {
+                        const rt = 60 / (st * ot);
+                        if (rt >= 80 && rt <= 200) {
+                            const R = Math.round(rt * 10) / 10, X = Math.round(R);
+                            Q[X] = (Q[X] || 0) + 1;
+                        }
+                    });
+                });
+                H = parseInt(Object.entries(Q).reduce((st, ot) => st[1] > ot[1] ? st : ot, ["128", 0])[0]);
+            }
+
+            const Y = 60 / H / 4;
+            let K = 0, G = -1;
+            for (let Q = 0; Q < Y; Q += 0.005) {
+                let I = 0;
+                [...b].sort((ot, rt) => rt.saliency - ot.saliency).slice(0, 50).forEach(ot => {
+                    const rt = Math.abs(((ot.time - Q) % Y + Y) % Y), R = Math.min(rt, Y - rt);
+                    I += ot.saliency * Math.exp(-(R * R) / (2 * 0.01 * 0.01));
+                });
+                if (I > G) { G = I; K = Q; }
+            }
+
+            const at = 2, k = at / 60 * targetDensity, q = [];
+            const W = 60 / targetDensity * 0.6;
+
+            for (let Q = 0; Q < duration; Q += at) {
+                const I = b.filter(rt => rt.time >= Q && rt.time < Q + at);
+                I.sort((rt, R) => R.saliency - rt.saliency);
+                let st = 0; const ot = Math.ceil(k);
+                for (const rt of I) {
+                    if (st >= ot) break;
+                    if (!q.some(X => Math.abs(X.time - rt.time) < W)) {
+                        const X = Math.round((rt.time - K) / Y) * Y + K;
+                        let F = Math.floor(Math.random() * 4);
+                        if (q.length >= 2) {
+                            if (F === q[q.length - 1].track && F === q[q.length - 2].track) F = (F + 1) % 4;
+                        }
+                        q.push({ time: Number(Math.max(0, X).toFixed(4)), track: F, type: 0, endTime: 0 });
+                        st++;
+                    }
+                }
+            }
+            q.sort((Q, I) => Q.time - I.time);
+            audioCtx.close();
+            return {
+                musicType: -1,
+                musicName: file.name.replace(/\.[^/.]+$/, ""),
+                fallTime: 1,
+                bpm: H,
+                audioOffset: Number(K.toFixed(4)),
+                notes: q.filter((Q, I, st) => I === 0 || Q.time !== st[I-1].time)
+            };
+        }
+
+        generateBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+            generateBtn.disabled = true;
+            generateBtn.innerText = "Analyzing Tracks...";
+            showError("");
+
+            try {
+                const chosenDensity = parseInt(densitySlider.value);
+                const rawMap = await runMapGeneration(selectedFile, chosenDensity);
+                const userOffset = parseFloat(offsetSlider.value);
+                const biasedNotes = rawMap.notes.map(n => ({ ...n, time: Number(Math.max(0, n.time + userOffset).toFixed(4)) }));
+
+                finalOutputMap = { ...rawMap, notes: biasedNotes };
+                downloadBtn.classList.remove('hidden');
+                previewContainer.classList.remove('hidden');
+                setupCanvasDimensions();
+                
+                timelineSlider.max = hiddenMedia.duration || 100;
+                totalTimeTxt.innerText = formatTime(hiddenMedia.duration || 0);
+                generateBtn.innerText = "Regenerate Map";
+                drawPreviewLoop();
+            } catch (err) {
+                showError("Analysis failed.");
+                console.error(err);
+            } finally {
+                generateBtn.disabled = false;
+            }
+        });
+
+        // 播放器監聽
+        playPauseBtn.addEventListener('click', () => {
+            if (isPlaying) { hiddenMedia.pause(); stopPreview(); } 
+            else { hiddenMedia.play(); isPlaying = true; playPauseBtn.innerText = "⏸"; drawPreviewLoop(); }
+        });
+        timelineSlider.addEventListener('input', (e) => { hiddenMedia.currentTime = parseFloat(e.target.value); updateTimeDisplay(); });
+        hiddenMedia.addEventListener('timeupdate', () => { if (!hiddenMedia.paused) { timelineSlider.value = hiddenMedia.currentTime; updateTimeDisplay(); } });
+        hiddenMedia.addEventListener('ended', () => stopPreview());
+        function stopPreview() { isPlaying = false; playPauseBtn.innerText = "▶"; if (animationFrameId) cancelAnimationFrame(animationFrameId); }
+        function updateTimeDisplay() { currentTimeTxt.innerText = formatTime(hiddenMedia.currentTime); }
+        function formatTime(seconds) { if (isNaN(seconds)) return "0:00"; const m = Math.floor(seconds / 60), s = Math.floor(seconds % 60); return `${m}:${s.toString().padStart(2, '0')}`; }
+
+        function setupCanvasDimensions() {
+            const rect = previewCanvas.getBoundingClientRect();
+            previewCanvas.width = rect.width * window.devicePixelRatio;
+            previewCanvas.height = rect.height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+
+        // 下落式瀑布流
+        function drawPreviewLoop() {
+            const w = previewCanvas.width / window.devicePixelRatio;
+            const h = previewCanvas.height / window.devicePixelRatio;
+            
+            ctx.fillStyle = "#111115";
+            ctx.fillRect(0, 0, w, h);
+
+            const curTime = hiddenMedia.currentTime;
+            const laneWidth = w / 4;
+
+            for (let i = 1; i < 4; i++) {
+                ctx.beginPath(); ctx.moveTo(i * laneWidth, 0); ctx.lineTo(i * laneWidth, h); 
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.04)"; ctx.lineWidth = 1; ctx.stroke();
+            }
+
+            const judgmentY = h - 45; 
+            ctx.strokeStyle = "rgba(99, 102, 241, 0.8)"; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(0, judgmentY); ctx.lineTo(w, judgmentY); ctx.stroke();
+
+            const timeWindow = 1.2; 
+
+            if (finalOutputMap && finalOutputMap.notes) {
+                finalOutputMap.notes.forEach(note => {
+                    if (note.time >= curTime - 0.1 && note.time <= curTime + timeWindow) {
+                        const timeDelta = note.time - curTime;
+                        const noteY = judgmentY - (timeDelta / timeWindow) * judgmentY;
+                        const noteX = (note.track * laneWidth) + (laneWidth / 2);
+
+                        if (Math.abs(timeDelta) < 0.06) {
+                            ctx.fillStyle = "#10b981"; ctx.shadowBlur = 12; ctx.shadowColor = "#10b981";
+                        } else if (timeDelta < 0) {
+                            ctx.fillStyle = "rgba(107, 114, 128, 0.25)"; ctx.shadowBlur = 0;
+                        } else {
+                            ctx.fillStyle = "#6366f1"; ctx.shadowBlur = 6; ctx.shadowColor = "#6366f1";
+                        }
+
+                        const barW = laneWidth * 0.78; const barH = 8;
+                        ctx.beginPath(); ctx.roundRect(noteX - barW/2, noteY - barH/2, barW, barH, 4); ctx.fill();
+                    }
+                });
+                ctx.shadowBlur = 0;
+            }
+            animationFrameId = requestAnimationFrame(drawPreviewLoop);
+        }
+
+        // 深度 APK 檔案生成與優化複製
+        downloadBtn.addEventListener('click', () => {
+            if (!finalOutputMap) return;
+            const dataStr = JSON.stringify(finalOutputMap, null, 2);
+            
+            // 【全新優化：APK 相容本機檔案下載流】
+            forceDownloadUri.onclick = () => {
+                try {
+                    // 使用 Blob 生成物件 URL
+                    const blob = new Blob([dataStr], { type: "application/json;charset=utf-8" });
+                    const blobUrl = URL.createObjectURL(blob);
+                    
+                    const tempAnchor = document.createElement("a");
+                    tempAnchor.href = blobUrl;
+                    tempAnchor.download = `${finalOutputMap.musicName}_map.json`;
+                    
+                    // 強制觸發
+                    document.body.appendChild(tempAnchor);
+                    tempAnchor.click();
+                    
+                    // 備用保障：同時派發純文字下載協議，增加在 WebView 的觸發成功率
+                    setTimeout(() => {
+                        document.body.removeChild(tempAnchor);
+                        window.URL.revokeObjectURL(blobUrl);
+                    }, 100);
+
+                    const readerLink = document.createElement("a");
+                    readerLink.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+                    readerLink.download = `${finalOutputMap.musicName}_map.json`;
+                    document.body.appendChild(readerLink);
+                    readerLink.click();
+                    document.body.removeChild(readerLink);
+                } catch (e) {
+                    alert("方案一觸發受阻，請使用方案二全量複製。");
+                }
+            };
+
+            // 全量一鍵複製（不受任何 Android 下載權限限制）
+            streamCopyBtn.onclick = () => {
+                const tempTextArea = document.createElement('textarea');
+                tempTextArea.value = dataStr;
+                tempTextArea.style.position = 'fixed';
+                tempTextArea.style.opacity = '0';
+                document.body.appendChild(tempTextArea);
+                tempTextArea.select();
+                tempTextArea.setSelectionRange(0, 999999);
+
+                try {
+                    if (document.execCommand('copy')) {
+                        alert("📋 譜面數據已 100% 完整複製！未受系統限制截斷。您可以直接去遊戲內貼上遊玩了！");
+                        copyModal.classList.add('hidden');
+                    }
+                } catch (err) {
+                    alert("裝置暫不支援複製。");
+                }
+                document.body.removeChild(tempTextArea);
+            };
+
+            copyModal.classList.remove('hidden');
+        });
+
+        modalCloseBtn.addEventListener('click', () => copyModal.classList.add('hidden'));
+        function showError(msg) { if (msg) { errorBox.innerText = msg; errorBox.classList.remove('hidden'); } else { errorBox.classList.add('hidden'); } }
+    
+        })();
+    </script>
+
+    <script>
+        // ====== LRC 歌詞工作台邏輯（維持全域作用域，因內部使用 inline onclick）======
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+    const mediaFileUploader = document.getElementById('media-file-uploader');
+    const docFileUploader = document.getElementById('doc-file-uploader');
+    const html5AudioNode = document.getElementById('html5-audio-node');
+    const html5VideoNode = document.getElementById('html5-video-node');
+    const btnResetMedia = document.getElementById('btn-reset-media');
+    
+    const textareaLyricsSource = document.getElementById('textarea-lyrics-source');
+    const livePreviewBoard = document.getElementById('live-preview-board');
+    const playbackScrollViewport = document.getElementById('playback-scroll-viewport');
+    const lblPlaybackCounter = document.getElementById('lbl-playback-counter');
+    const btnMasterPlay = document.getElementById('btn-master-play');
+    const progressMasterSlider = document.getElementById('progress-master-slider');
+    const lblTrackCurrent = document.getElementById('lbl-track-current');
+    const lblTrackTotal = document.getElementById('lbl-track-total');
+    const lblFileStatusText = document.getElementById('lbl-file-status-text');
+    const uploadPanelBox = document.getElementById('upload-panel-box');
+    const lblToggleText = document.getElementById('lbl-toggle-text');
+    const globalToastBox = document.getElementById('global-toast-box');
+    const wrapperRawTextarea = document.getElementById('wrapper-raw-textarea');
+    const btnToggleEdit = document.getElementById('btn-toggle-edit');
+
+    let lyricsLinesArray = []; 
+    let processedPlaybackData = [];
+    let isPlaying = false;
+    let hasUserMedia = false;
+    let currentMediaType = 'none'; 
+    let currentGlobalTime = 0;
+    let totalMediaDuration = 1800; // 模擬時鐘模式預設長度（30分鐘），避免歌詞太長被截斷
+    let simulationTimer = null;
+    let lastTrackedIndex = -1;
+    let metadataTags = { title: "", artist: "" };
+
+    function parseToTimeStr(seconds) {
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+    }
+
+    function convertToLrcFormat(seconds) {
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+        const f = Math.floor((seconds % 1) * 100).toString().padStart(2, '0');
+        return `[${m}:${s}.${f}]`;
+    }
+
+    function switchActiveTab(targetTab) {
+        document.getElementById('tab-btn-maker').classList.remove('active');
+        document.getElementById('tab-btn-player').classList.remove('active');
+        document.getElementById('view-content-maker').classList.remove('active');
+        document.getElementById('view-content-player').classList.remove('active');
+        
+        if (targetTab === 'maker') {
+            document.getElementById('tab-btn-maker').classList.add('active');
+            document.getElementById('view-content-maker').classList.add('active');
+            renderLivePreviewBoardUI(); 
+        } else {
+            document.getElementById('tab-btn-player').classList.add('active');
+            document.getElementById('view-content-player').classList.add('active');
+            generatePlaybackPanelUI();
+        }
+    }
+
+    function toggleUploadContainer() {
+        if (uploadPanelBox.style.display === "none") {
+            uploadPanelBox.style.display = "block";
+            lblToggleText.innerText = "隱藏上傳區";
+        } else {
+            uploadPanelBox.style.display = "none";
+            lblToggleText.innerText = "顯示上傳區";
+        }
+    }
+
+    function toggleUnlockTextarea() {
+        if (wrapperRawTextarea.style.display === "none") {
+            wrapperRawTextarea.style.display = "block";
+            btnToggleEdit.innerText = "🔒 隱藏大框";
+        } else {
+            wrapperRawTextarea.style.display = "none";
+            btnToggleEdit.innerText = "🔓 解鎖大框";
+        }
+    }
+
+    mediaFileUploader.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            if (simulationTimer) clearInterval(simulationTimer);
+            isPlaying = false; btnMasterPlay.innerText = "▶"; currentGlobalTime = 0;
+            html5AudioNode.removeAttribute('src'); html5AudioNode.load();
+            html5VideoNode.removeAttribute('src'); html5VideoNode.load();
+            hasUserMedia = true; btnResetMedia.style.display = 'inline-block'; 
+            const fileURL = URL.createObjectURL(file);
+
+            if (file.type.startsWith('video/') || file.name.toLowerCase().endsWith('.mp4')) {
+                currentMediaType = 'video';
+                lblFileStatusText.innerText = `目前影片：${file.name}`;
+                html5VideoNode.src = fileURL; html5VideoNode.load();
+                html5VideoNode.onloadedmetadata = function() {
+                    totalMediaDuration = html5VideoNode.duration; setupTrackTimelineProperties();
+                };
+            } else {
+                currentMediaType = 'audio';
+                lblFileStatusText.innerText = `目前音軌：${file.name}`;
+                html5AudioNode.src = fileURL; html5AudioNode.load();
+                html5AudioNode.onloadedmetadata = function() {
+                    totalMediaDuration = html5AudioNode.duration; setupTrackTimelineProperties();
+                };
+            }
+            setTimeout(() => { toggleUploadContainer(); }, 400);
+        }
+    });
+
+    function resetUploadedMediaFile() {
+        if (simulationTimer) clearInterval(simulationTimer);
+        isPlaying = false; btnMasterPlay.innerText = "▶";
+        html5AudioNode.removeAttribute('src'); html5AudioNode.load();
+        html5VideoNode.removeAttribute('src'); html5VideoNode.load();
+        mediaFileUploader.value = ""; hasUserMedia = false; currentMediaType = 'none';
+        currentGlobalTime = 0; totalMediaDuration = 1800; btnResetMedia.style.display = 'none';
+        lblFileStatusText.innerText = "音訊狀態：未上傳影音 (模擬時鐘模式)";
+        setupTrackTimelineProperties();
+    }
+
+    function setupTrackTimelineProperties() {
+        progressMasterSlider.max = totalMediaDuration;
+        progressMasterSlider.value = 0;
+        lblTrackTotal.innerText = parseToTimeStr(totalMediaDuration);
+        lblTrackCurrent.innerText = "00:00";
+        syncToPreviewBoard();
+    }
+
+    function lockAndStartTagging() {
+        wrapperRawTextarea.style.display = "none";
+        btnToggleEdit.innerText = "🔓 解鎖大框";
+        syncToPreviewBoard();
+    }
+
+    function syncToPreviewBoard() {
+        const srcText = textareaLyricsSource.value;
+        const rawLines = srcText.split('\n');
+        lyricsLinesArray = [];
+        const lrcRegex = /^(\[\d{2}:\d{2}\.\d{2}\])(.*)/;
+
+        rawLines.forEach(lineStr => {
+            let cleanStr = lineStr.trim();
+            if (cleanStr === "") return;
+            const match = lrcRegex.exec(cleanStr);
+            if (match) {
+                lyricsLinesArray.push({ timestamp: match[1], text: match[2].trim() });
+            } else {
+                lyricsLinesArray.push({ timestamp: null, text: cleanStr });
+            }
+        });
+        renderLivePreviewBoardUI();
+    }
+
+    function renderLivePreviewBoardUI() {
+        if (lyricsLinesArray.length === 0) {
+            livePreviewBoard.innerHTML = `<div style="color:#555; text-align:center; padding-top:20px; font-size:13px;">請先在上方輸入框輸入歌詞...</div>`;
+            return;
+        }
+        livePreviewBoard.innerHTML = '';
+        let targetDOMToScroll = null;
+        let foundNextTarget = false;
+
+        lyricsLinesArray.forEach((lineItem, index) => {
+            const lineDiv = document.createElement('div');
+            lineDiv.className = 'sv-board-line';
+
+            if (lineItem.timestamp) {
+                lineDiv.classList.add('already-tagged');
+                lineDiv.innerHTML = `<span style="font-family:monospace; margin-right:12px; color:var(--primary-color); font-weight:bold;">${lineItem.timestamp}</span><span>${lineItem.text}</span>`;
+            } else {
+                if (!foundNextTarget) {
+                    lineDiv.classList.add('next-target'); 
+                    foundNextTarget = true;
+                    targetDOMToScroll = lineDiv; // 追蹤目前焦點行
+                }
+                lineDiv.innerHTML = `<span>${lineItem.text}</span>`;
+            }
+
+            // 雙擊編輯事件
+            lineDiv.addEventListener('dblclick', function(e) {
+                e.stopPropagation();
+                if (lineDiv.querySelector('input')) return;
+                lineDiv.innerHTML = '';
+
+                const timeInput = document.createElement('input');
+                timeInput.className = 'board-inline-input-time';
+                timeInput.value = lineItem.timestamp || '';
+
+                const textInput = document.createElement('input');
+                textInput.className = 'board-inline-input-text';
+                textInput.value = lineItem.text;
+
+                lineDiv.appendChild(timeInput); lineDiv.appendChild(textInput);
+                textInput.focus();
+
+                function saveInlineChanges() {
+                    let newTime = timeInput.value.trim();
+                    let newText = textInput.value.trim();
+                    if (newTime !== "" && !newTime.startsWith('[')) newTime = '[' + newTime;
+                    if (newTime !== "" && !newTime.endsWith(']')) newTime = newTime + ']';
+                    lineItem.timestamp = newTime === "" ? null : newTime;
+                    lineItem.text = newText === "" ? " " : newText;
+                    updateSourceTextareaFromData(); renderLivePreviewBoardUI();
+                }
+
+                let isSaved = false;
+                textInput.addEventListener('keydown', (evt) => { if (evt.key === 'Enter') { isSaved = true; saveInlineChanges(); } });
+                timeInput.addEventListener('keydown', (evt) => { if (evt.key === 'Enter') { isSaved = true; saveInlineChanges(); } });
+                textInput.addEventListener('blur', () => { setTimeout(() => { if(!isSaved && document.activeElement!==timeInput && document.activeElement!==textInput) saveInlineChanges(); }, 150); });
+                timeInput.addEventListener('blur', () => { setTimeout(() => { if(!isSaved && document.activeElement!==timeInput && document.activeElement!==textInput) saveInlineChanges(); }, 150); });
+            });
+
+            livePreviewBoard.appendChild(lineDiv);
+        });
+
+        // 🌟 自動聚焦滾動：讓焦點歌詞行自動在卡片內滑行對齊
+        if (targetDOMToScroll) {
+            setTimeout(() => {
+                livePreviewBoard.scrollTop = targetDOMToScroll.offsetTop - livePreviewBoard.offsetTop - 120;
+            }, 50);
+        }
+    }
+
+    function captureNextLineStamp() {
+        let targetItem = lyricsLinesArray.find(item => item.timestamp === null);
+        if (targetItem) {
+            targetItem.timestamp = convertToLrcFormat(currentGlobalTime);
+            updateSourceTextareaFromData(); renderLivePreviewBoardUI();
+        }
+    }
+
+    function updateSourceTextareaFromData() {
+        let outputLines = [];
+        if (metadataTags.title) outputLines.push(`[ti:${metadataTags.title}]`);
+        if (metadataTags.artist) outputLines.push(`[ar:${metadataTags.artist}]`);
+        lyricsLinesArray.forEach(item => {
+            if (item.timestamp) outputLines.push(`${item.timestamp}${item.text}`);
+            else outputLines.push(item.text);
+        });
+        textareaLyricsSource.value = outputLines.join('\n');
+    }
+
+    function undoLastLineTag() {
+        let reversed = [...lyricsLinesArray].reverse();
+        let lastTagged = reversed.find(item => item.timestamp !== null);
+        if (lastTagged) { lastTagged.timestamp = null; updateSourceTextareaFromData(); renderLivePreviewBoardUI(); }
+    }
+
+    function resetAllTagsToRaw() {
+        lyricsLinesArray.forEach(item => item.timestamp = null);
+        updateSourceTextareaFromData(); renderLivePreviewBoardUI();
+        wrapperRawTextarea.style.display = "block"; btnToggleEdit.innerText = "🔒 隱藏大框";
+    }
+
+    function copyCurrentLrcText() {
+        if(textareaLyricsSource.value.trim() === "") return;
+        showToastNotification(textareaLyricsSource.value, "LRC歌詞");
+    }
+
+    function exportTxtFileDownload() {
+        if(textareaLyricsSource.value.trim() === "") return;
+        const blob = new Blob([textareaLyricsSource.value], { type: "text/plain;charset=utf-8" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob); link.download = "Lyrics_Output.txt"; link.click();
+    }
+
+    function triggerSongMetadataInfo() {
+        const t = prompt("歌名：", metadataTags.title);
+        const a = prompt("歌手：", metadataTags.artist);
+        if (t !== null) metadataTags.title = t.trim();
+        if (a !== null) metadataTags.artist = a.trim();
+        updateSourceTextareaFromData(); renderLivePreviewBoardUI();
+    }
+
+    function generatePlaybackPanelUI() {
+        playbackScrollViewport.innerHTML = ''; processedPlaybackData = [];
+        const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2})\]/;
+
+        lyricsLinesArray.forEach(item => {
+            if (item.timestamp) {
+                const match = timeRegex.exec(item.timestamp);
+                if (match) {
+                    const sec = parseInt(match[1],10)*60 + parseInt(match[2],10) + parseInt(match[3],10)/100;
+                    processedPlaybackData.push({ seconds: sec, text: item.text });
+                }
+            }
+        });
+        processedPlaybackData.sort((a, b) => a.seconds - b.seconds);
+
+        if (processedPlaybackData.length === 0) {
+            playbackScrollViewport.innerHTML = `<div style="color:#555; text-align:center; padding-top:40px;">請先去第一頁打點完成時間軸。</div>`;
+            lblPlaybackCounter.innerText = `0 / 0 行`; return;
+        }
+
+        processedPlaybackData.forEach((row, idx) => {
+            let dur = 3.0;
+            if (idx < processedPlaybackData.length - 1) dur = processedPlaybackData[idx+1].seconds - row.seconds;
+            else if (totalMediaDuration > row.seconds) dur = totalMediaDuration - row.seconds;
+
+            const rowDiv = document.createElement('div');
+            rowDiv.className = 'player-row-item'; rowDiv.id = `player-row-${idx}`;
+            rowDiv.innerHTML = `
+                <div class="player-left-time" onclick="showToastNotification('${row.seconds.toFixed(2)}','秒數')">${row.seconds.toFixed(2)}s</div>
+                <div class="player-center-text" onclick="showToastNotification('${row.text}','文字')">${row.text}</div>
+                <div class="player-right-duration"><span class="hourglass-tag-btn" onclick="showToastNotification('${dur.toFixed(2)}','持續時間')">⏳ ${dur.toFixed(2)}s</span></div>
+            `;
+            rowDiv.addEventListener('dblclick', () => jumpToSpecificTimeline(row.seconds));
+            playbackScrollViewport.appendChild(rowDiv);
+        });
+        lblPlaybackCounter.innerText = `0 / ${processedPlaybackData.length} 行`;
+        lastTrackedIndex = -1; syncActiveTimelineAndScroll(currentGlobalTime);
+    }
+
+    function showToastNotification(text, type) {
+        const area = document.createElement("textarea"); area.value = text; area.style.position = "fixed"; area.style.left = "-9999px";
+        document.body.appendChild(area); area.select();
+        try {
+            document.execCommand("copy");
+            globalToastBox.innerText = `📋 已複製${type}："${text}"`; globalToastBox.style.opacity = '1';
+            setTimeout(() => { globalToastBox.style.opacity = '0'; }, 1200);
+        } catch(e){}
+        document.body.removeChild(area);
+    }
+
+    function toggleAudioPlayback() {
+        if (!isPlaying) {
+            isPlaying = true; btnMasterPlay.innerText = "⏸";
+            if (hasUserMedia) {
+                if (currentMediaType === 'video') html5VideoNode.play().catch(e=>{});
+                else html5AudioNode.play().catch(e=>{});
+                startMediaUpdateLoop();
+            } else { startVirtualPlaybackClock(); }
+        } else {
+            isPlaying = false; btnMasterPlay.innerText = "▶";
+            if (hasUserMedia) { if (currentMediaType === 'video') html5VideoNode.pause(); else html5AudioNode.pause(); }
+            if (simulationTimer) clearInterval(simulationTimer);
+        }
+    }
+
+    function startMediaUpdateLoop() {
+        if (simulationTimer) clearInterval(simulationTimer);
+        simulationTimer = setInterval(() => {
+            if (hasUserMedia && isPlaying) {
+                currentGlobalTime = (currentMediaType === 'video') ? html5VideoNode.currentTime : html5AudioNode.currentTime;
+                syncActiveTimelineAndScroll(currentGlobalTime);
+            }
+        }, 30);
+    }
+
+    function startVirtualPlaybackClock() {
+        if (simulationTimer) clearInterval(simulationTimer);
+        simulationTimer = setInterval(() => {
+            if (currentGlobalTime >= totalMediaDuration) { resetGlobalAudioEngine(); return; }
+            currentGlobalTime += 0.05; syncActiveTimelineAndScroll(currentGlobalTime);
+        }, 50);
+    }
+
+    function handleSliderChange() { jumpToSpecificTimeline(parseFloat(progressMasterSlider.value)); }
+    function jumpToSpecificTimeline(secs) {
+        currentGlobalTime = secs;
+        if (hasUserMedia) { if (currentMediaType === 'video') html5VideoNode.currentTime = secs; else html5AudioNode.currentTime = secs; }
+        syncActiveTimelineAndScroll(secs);
+    }
+    function skipAudioSeconds(secs) {
+        let t = currentGlobalTime + secs; if (t < 0) t = 0; if (t > totalMediaDuration) t = totalMediaDuration;
+        jumpToSpecificTimeline(t);
+    }
+
+    function syncActiveTimelineAndScroll(currentTime) {
+        progressMasterSlider.value = currentTime; lblTrackCurrent.innerText = parseToTimeStr(currentTime);
+        if (processedPlaybackData.length === 0) return;
+        
+        let matchedIndex = -1;
+        for (let i = 0; i < processedPlaybackData.length; i++) {
+            if (currentTime >= processedPlaybackData[i].seconds) matchedIndex = i;
+            else break;
+        }
+
+        if (matchedIndex !== lastTrackedIndex) {
+            const actives = playbackScrollViewport.querySelectorAll('.player-row-item.current-active');
+            actives.forEach(el => el.classList.remove('current-active'));
+            lastTrackedIndex = matchedIndex;
+            if (matchedIndex !== -1) {
+                const row = document.getElementById(`player-row-${matchedIndex}`);
+                if (row) { 
+                    row.classList.add('current-active'); 
+                    lblPlaybackCounter.innerText = `${matchedIndex + 1} / ${processedPlaybackData.length} 行`;
+                    playbackScrollViewport.scrollTop = row.offsetTop - playbackScrollViewport.offsetTop - 120;
+                }
+            }
+        }
+    }
+
+    function resetGlobalAudioEngine() {
+        isPlaying = false; if (simulationTimer) clearInterval(simulationTimer); btnMasterPlay.innerText = "▶";
+        if (hasUserMedia) { if (currentMediaType === 'video') { html5VideoNode.pause(); html5VideoNode.currentTime = 0; } else { html5AudioNode.pause(); html5AudioNode.currentTime = 0; } }
+        currentGlobalTime = 0; syncActiveTimelineAndScroll(0);
+    }
+
+    docFileUploader.addEventListener('change', function(e) {
+        const file = e.target.files[0]; if (!file) return;
+        const nameExt = file.name.toLowerCase();
+        if (nameExt.endsWith('.pdf')) {
+            const reader = new FileReader();
+            reader.onload = async function(evt) {
+                const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(evt.target.result) }).promise;
+                let text = "";
+                for (let i = 1; i <= pdf.numPages; i++) { const page = await pdf.getPage(i); const token = await page.getTextContent(); text += token.items.map(item => item.str).join(" ") + "\n"; }
+                textareaLyricsSource.value = text.replace(/(\[\d{2}:\d{2}\.\d{2}\])/g, "\n$1"); lockAndStartTagging();
+            };
+            reader.readAsArrayBuffer(file);
+        } else if (nameExt.endsWith('.docx')) {
+            const reader = new FileReader();
+            reader.onload = function(evt) { mammoth.extractRawText({ arrayBuffer: evt.target.result }).then(r => { textareaLyricsSource.value = r.value.replace(/(\[\d{2}:\d{2}\.\d{2}\])/g, "\n$1"); lockAndStartTagging(); }); };
+            reader.readAsArrayBuffer(file);
+        } else {
+            const reader = new FileReader(); reader.onload = function(evt) { textareaLyricsSource.value = evt.target.result; lockAndStartTagging(); }; reader.readAsText(file, 'UTF-8');
+        }
+    });
+
+    </script>
+</body>
+</html>
